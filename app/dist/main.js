@@ -128,8 +128,10 @@ import_electron.app.whenReady().then(() => {
   console.log("sync.sh ok:", import_fs.existsSync(import_path.join(ROOT, "sync.sh")));
   console.log(`======================================
 `);
-  import_electron.Menu.setApplicationMenu(null);
   createWindow();
+  import_electron.globalShortcut.register("F12", () => {
+    win?.webContents.toggleDevTools();
+  });
   import_electron.app.on("activate", () => {
     if (import_electron.BrowserWindow.getAllWindows().length === 0)
       createWindow();

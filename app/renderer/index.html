@@ -157,7 +157,7 @@
     throw new Error("window.api is undefined — preload script did not load");
   }
 
-  const api = window.api;
+  const appApi = window.api;
   let isSyncing = false;
   let offSyncLine = null;
 
@@ -172,11 +172,11 @@
   async function loadProjects() {
     let projects;
     try {
-      console.log("[renderer] calling api.getProjects...");
-      projects = await api.getProjects();
-      console.log("[renderer] api.getProjects result:", projects);
+      console.log("[renderer] calling appApi.getProjects...");
+      projects = await appApi.getProjects();
+      console.log("[renderer] appApi.getProjects result:", projects);
     } catch (e) {
-      console.error("[renderer] api.getProjects error:", e);
+      console.error("[renderer] appApi.getProjects error:", e);
       termAppend(`❌ getProjects error: ${e}\n`, "error");
       return;
     }
@@ -225,7 +225,7 @@
 
   // ---- Git log ----
   async function loadGitLog() {
-    const log = await api.getGitLog();
+    const log = await appApi.getGitLog();
     const container = document.getElementById("git-log");
     container.textContent = "";
     for (const line of (log || "").split("\n").filter(Boolean)) {
@@ -257,7 +257,7 @@
     termAppend(project ? `▶ Syncing: ${project}\n` : "▶ Syncing all projects...\n", "info");
 
     // Register IPC listener before invoking
-    offSyncLine = api.onSyncLine((data) => {
+    offSyncLine = appApi.onSyncLine((data) => {
       if (data.done) {
         termAppend(data.code === 0 ? "\n✅ Done\n" : "\n❌ Exited with error\n",
           data.code === 0 ? "success" : "error");
@@ -267,7 +267,7 @@
       }
     });
 
-    await api.sync(project);
+    await appApi.sync(project);
   }
 
   async function finishSync() {
@@ -334,8 +334,8 @@
   }
 
   // ---- Init ----
-  console.log("[renderer] init — api methods:", Object.keys(api));
-  termAppend(`[debug] window.api keys: ${Object.keys(api).join(", ")}\n`, "dim");
+  console.log("[renderer] init — api methods:", Object.keys(appApi));
+  termAppend(`[debug] window.api keys: ${Object.keys(appApi).join(", ")}\n`, "dim");
   loadProjects();
   loadGitLog();
   termAppend('Ready. Press "Sync All" or sync a project.\n', "dim");

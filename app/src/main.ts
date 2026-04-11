@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, globalShortcut } from "electron";
 
 app.commandLine.appendSwitch("disable-features", "AutofillServerCommunication");
 
@@ -149,8 +149,11 @@ app.whenReady().then(() => {
   console.log("sync.sh ok:", existsSync(join(ROOT, "sync.sh")));
   console.log("======================================\n");
 
-  Menu.setApplicationMenu(null);
   createWindow();
+
+  globalShortcut.register("F12", () => {
+    win?.webContents.toggleDevTools();
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
