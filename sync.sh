@@ -80,12 +80,17 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     continue
   fi
 
-  if bash "$AI_CONFIGS_DIR/setup.sh" "$PROJECT" "$TARGET"; then
-    ((SUCCESS++))
-  else
-    echo "❌ Failed"
-    ((FAIL++))
-  fi
+  # Collect: คัดลอก AI configs จาก target → projects/PROJECT/
+  DEST="$AI_CONFIGS_DIR/projects/$PROJECT"
+  mkdir -p "$DEST"
+  for item in CLAUDE.md .claude .cursor .agent .gemini .toh; do
+    if [ -e "$TARGET/$item" ]; then
+      cp -r "$TARGET/$item" "$DEST/"
+    fi
+  done
+  echo "📥 Collected configs → projects/$PROJECT/"
+
+  ((SUCCESS++))
 
 done < "$CONF_FILE"
 
