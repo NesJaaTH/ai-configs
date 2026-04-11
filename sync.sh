@@ -125,8 +125,13 @@ else
   echo "✅ Committed"
 fi
 
-if git push origin HEAD 2>&1; then
+# ใช้ gh เป็น credential helper ถ้ามี
+if command -v gh &>/dev/null && gh auth status &>/dev/null; then
+  gh auth setup-git 2>/dev/null
+fi
+
+if GIT_TERMINAL_PROMPT=0 git push origin HEAD 2>&1; then
   echo "✅ Pushed to origin"
 else
-  echo "❌ Push failed — check auth or branch"
+  echo "❌ Push failed — run: gh auth login && gh auth setup-git"
 fi
