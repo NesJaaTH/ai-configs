@@ -1,0 +1,12 @@
+{
+  "name": "ai-configs",
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "bun run build && electron .",
+    "build": "bun build src/main.ts src/preload.ts --target=node --format=cjs --outdir=dist --external=electron"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0"
+  }
+}
