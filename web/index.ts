@@ -32,6 +32,12 @@ function toShellPath(p: string): string {
 const ROOT = join(import.meta.dir, "..");       // for Node fs calls
 const SHELL_ROOT = toShellPath(ROOT);           // for bash args
 
+// หา bash binary
+const BASH =
+  Bun.which("bash") ??
+  Bun.which("bash.exe") ??
+  "C:\\Program Files\\Git\\bin\\bash.exe";
+
 // Parse projects.conf
 function parseProjects() {
   const conf = readFileSync(join(ROOT, "projects.conf"), "utf-8");
@@ -99,10 +105,9 @@ Bun.serve({
 
       const stream = new ReadableStream({
         async start(controller) {
-          const bashCmd = ENV === "gitbash" ? "bash.exe" : "bash";
           const args = project
-            ? [bashCmd, `${SHELL_ROOT}/sync.sh`, project]
-            : [bashCmd, `${SHELL_ROOT}/sync.sh`];
+            ? [BASH, `${SHELL_ROOT}/sync.sh`, project]
+            : [BASH, `${SHELL_ROOT}/sync.sh`];
 
           const proc = Bun.spawn(args, {
             cwd: SHELL_ROOT,
