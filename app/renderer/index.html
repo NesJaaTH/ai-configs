@@ -170,7 +170,16 @@
 
   // ---- Projects ----
   async function loadProjects() {
-    const projects = await api.getProjects();
+    let projects;
+    try {
+      console.log("[renderer] calling api.getProjects...");
+      projects = await api.getProjects();
+      console.log("[renderer] api.getProjects result:", projects);
+    } catch (e) {
+      console.error("[renderer] api.getProjects error:", e);
+      termAppend(`❌ getProjects error: ${e}\n`, "error");
+      return;
+    }
     document.getElementById("project-count").textContent = projects.length;
 
     const groups = {};
@@ -325,6 +334,8 @@
   }
 
   // ---- Init ----
+  console.log("[renderer] init — api methods:", Object.keys(api));
+  termAppend(`[debug] window.api keys: ${Object.keys(api).join(", ")}\n`, "dim");
   loadProjects();
   loadGitLog();
   termAppend('Ready. Press "Sync All" or sync a project.\n', "dim");
