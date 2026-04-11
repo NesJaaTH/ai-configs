@@ -115,14 +115,28 @@ if ! git remote get-url origin > /dev/null 2>&1; then
   echo "✅ Remote added"
 fi
 
+# ตั้ง git identity จาก gh ถ้ายังไม่มี
+if command -v gh &>/dev/null && gh auth status &>/dev/null; then
+  if [ -z "$(git config user.email)" ]; then
+    GH_EMAIL=$(gh api user/emails --jq '[.[] | select(.primary==true)] | .[0].email' 2>/dev/null)
+    GH_NAME=$(gh api user --jq '.name // .login' 2>/dev/null)
+    [ -n "$GH_EMAIL" ] && git config --global user.email "$GH_EMAIL"
+    [ -n "$GH_NAME" ]  && git config --global user.name  "$GH_NAME"
+  fi
+fi
+
 git add -A
 
 if git diff --cached --quiet; then
   echo "ℹ️  Nothing to commit"
 else
   TIMESTAMP=$(date '+%Y-%m-%d %H:%M')
-  git commit -m "sync: $TIMESTAMP"
-  echo "✅ Committed"
+  if git commit -m "sync: $TIMESTAMP"; then
+    echo "✅ Committed"
+  else
+    echo "❌ Commit failed"
+    exit 1
+  fi
 fi
 
 if command -v gh &>/dev/null && gh auth status &>/dev/null; then
