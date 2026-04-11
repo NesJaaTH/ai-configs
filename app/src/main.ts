@@ -98,6 +98,16 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  console.log("=== AI Configs Debug ===");
+  console.log("platform  :", process.platform);
+  console.log("ROOT      :", ROOT);
+  console.log("SHELL_ROOT:", SHELL_ROOT);
+  console.log("BASH      :", BASH);
+  console.log("bash found:", existsSync(BASH));
+  console.log("conf found:", existsSync(join(ROOT, "projects.conf")));
+  console.log("projects  :", parseProjects().map((p) => `${p.name} → ${p.path}`));
+  console.log("========================");
+
   Menu.setApplicationMenu(null);
   createWindow();
   app.on("activate", () => {
