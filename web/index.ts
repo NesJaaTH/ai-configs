@@ -42,6 +42,7 @@ async function gitLog() {
 
 Bun.serve({
   port: PORT,
+  idleTimeout: 0,
   async fetch(req) {
     const url = new URL(req.url);
 
