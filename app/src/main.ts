@@ -1,32 +1,56 @@
 import { app, BrowserWindow, ipcMain, Menu } from "electron";
 
 app.commandLine.appendSwitch("disable-features", "AutofillServerCommunication");
+
 import { join } from "path";
 import { existsSync, readFileSync, statSync } from "fs";
 import { execFileSync, spawnSync, spawn } from "child_process";
 
+// ---- Debug logger ----
+const DEBUG = true;
+function dbg(section: string, ...args: any[]) {
+  if (!DEBUG) return;
+  console.log(`[${section}]`, ...args);
+}
+
 // ---- Find bash ----
 function findBash(): string {
+  dbg("findBash", "platform =", process.platform);
+
   if (process.platform !== "win32") {
-    try { return execFileSync("which", ["bash"], { encoding: "utf-8" }).trim(); } catch {}
-    return "/bin/bash";
+    try {
+      const p = execFileSync("which", ["bash"], { encoding: "utf-8" }).trim();
+      dbg("findBash", "found via which →", p);
+      return p;
+    } catch {
+      dbg("findBash", "which failed, fallback /bin/bash");
+      return "/bin/bash";
+    }
   }
 
   const candidates = [
-    join(process.env.ProgramFiles        ?? "C:\\Program Files",       "Git", "bin", "bash.exe"),
+    join(process.env.ProgramFiles         ?? "C:\\Program Files",       "Git", "bin", "bash.exe"),
     join(process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", "Git", "bin", "bash.exe"),
-    join(process.env.LOCALAPPDATA        ?? "",                         "Programs", "Git", "bin", "bash.exe"),
+    join(process.env.LOCALAPPDATA         ?? "",                         "Programs", "Git", "bin", "bash.exe"),
   ];
 
   for (const c of candidates) {
+    dbg("findBash", "checking →", c, existsSync(c) ? "✅" : "❌");
     if (existsSync(c)) return c;
   }
 
   try {
     const r = spawnSync("where", ["bash.exe"], { encoding: "utf-8", shell: false });
-    if (r.stdout) return r.stdout.trim().split("\n")[0].trim();
-  } catch {}
+    const found = r.stdout?.trim().split("\n")[0].trim();
+    if (found) {
+      dbg("findBash", "found via where →", found);
+      return found;
+    }
+  } catch (e) {
+    dbg("findBash", "where failed →", e);
+  }
 
+  dbg("findBash", "fallback → bash.exe");
   return "bash.exe";
 }
 
@@ -36,49 +60,58 @@ function toShellPath(p: string): string {
   return p.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_, d) => `/${d.toLowerCase()}`);
 }
 
-const ROOT = app.isPackaged
-  ? join(process.resourcesPath, "app")
-  : join(__dirname, "..", "..");
-
+const ROOT       = app.isPackaged ? join(process.resourcesPath, "app") : join(__dirname, "..", "..");
 const SHELL_ROOT = toShellPath(ROOT);
-const BASH = findBash();
+const BASH       = findBash();
 
 // ---- Parse projects.conf ----
 function parseProjects() {
   const confPath = join(ROOT, "projects.conf");
+  dbg("parseProjects", "conf =", confPath, existsSync(confPath) ? "✅" : "❌ NOT FOUND");
   if (!existsSync(confPath)) return [];
 
-  return readFileSync(confPath, "utf-8")
+  const lines = readFileSync(confPath, "utf-8")
     .split("\n")
     .map((l) => l.replace(/\r/, "").trim())
-    .filter((l) => l && !l.startsWith("#"))
-    .map((line) => {
-      const [name, ...rest] = line.split(":");
-      const projectDir = join(ROOT, "projects", name.trim());
-      const hasConfig = existsSync(projectDir);
-      return {
-        name:     name.trim(),
-        path:     rest.join(":").trim(),
-        hasConfig,
-        lastSync: hasConfig ? statSync(projectDir).mtime.toISOString() : null,
-      };
-    });
+    .filter((l) => l && !l.startsWith("#"));
+
+  dbg("parseProjects", `${lines.length} entries found`);
+
+  return lines.map((line) => {
+    const [name, ...rest] = line.split(":");
+    const projectDir = join(ROOT, "projects", name.trim());
+    const hasConfig  = existsSync(projectDir);
+    const entry = {
+      name:     name.trim(),
+      path:     rest.join(":").trim(),
+      hasConfig,
+      lastSync: hasConfig ? statSync(projectDir).mtime.toISOString() : null,
+    };
+    dbg("parseProjects", `  ${entry.name} → ${entry.path} | hasConfig=${hasConfig}`);
+    return entry;
+  });
 }
 
 // ---- Git log ----
 function getGitLog(): string {
-  try {
-    const r = spawnSync("git", ["-C", ROOT, "log", "--oneline", "-8"], { encoding: "utf-8" });
-    return r.stdout?.trim() ?? "";
-  } catch {
+  dbg("getGitLog", "cwd =", ROOT);
+  const r = spawnSync("git", ["-C", ROOT, "log", "--oneline", "-8"], { encoding: "utf-8" });
+  if (r.error) {
+    dbg("getGitLog", "error →", r.error.message);
     return "";
   }
+  if (r.stderr) dbg("getGitLog", "stderr →", r.stderr.trim());
+  dbg("getGitLog", "ok →", r.stdout?.split("\n").length, "lines");
+  return r.stdout?.trim() ?? "";
 }
 
 // ---- Window ----
 let win: BrowserWindow;
 
 function createWindow() {
+  dbg("createWindow", "preload =", join(__dirname, "preload.js"));
+  dbg("createWindow", "html    =", join(__dirname, "..", "renderer", "index.html"));
+
   win = new BrowserWindow({
     width: 1100,
     height: 700,
@@ -98,18 +131,21 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  console.log("=== AI Configs Debug ===");
+  console.log("\n========== AI Configs Debug ==========");
   console.log("platform  :", process.platform);
+  console.log("packaged  :", app.isPackaged);
+  console.log("__dirname :", __dirname);
   console.log("ROOT      :", ROOT);
   console.log("SHELL_ROOT:", SHELL_ROOT);
   console.log("BASH      :", BASH);
-  console.log("bash found:", existsSync(BASH));
-  console.log("conf found:", existsSync(join(ROOT, "projects.conf")));
-  console.log("projects  :", parseProjects().map((p) => `${p.name} → ${p.path}`));
-  console.log("========================");
+  console.log("bash ok   :", existsSync(BASH));
+  console.log("conf ok   :", existsSync(join(ROOT, "projects.conf")));
+  console.log("sync.sh ok:", existsSync(join(ROOT, "sync.sh")));
+  console.log("======================================\n");
 
   Menu.setApplicationMenu(null);
   createWindow();
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -120,26 +156,57 @@ app.on("window-all-closed", () => {
 });
 
 // ---- IPC ----
-ipcMain.handle("projects:list", () => parseProjects());
-ipcMain.handle("git:log",       () => getGitLog());
+ipcMain.handle("projects:list", () => {
+  dbg("IPC", "projects:list called");
+  return parseProjects();
+});
+
+ipcMain.handle("git:log", () => {
+  dbg("IPC", "git:log called");
+  return getGitLog();
+});
 
 ipcMain.handle("sync:run", (event, project: string) => {
+  dbg("IPC", "sync:run called, project =", project || "(all)");
+
   return new Promise<number>((resolve) => {
     const scriptArgs = project ? [project] : [];
-    const proc = spawn(BASH, [`${SHELL_ROOT}/sync.sh`, ...scriptArgs], {
-      cwd:  ROOT,
-      env:  { ...process.env, FORCE_COLOR: "0" },
+    const cmd  = BASH;
+    const args = [`${SHELL_ROOT}/sync.sh`, ...scriptArgs];
+
+    dbg("sync:run", "spawn →", cmd, args.join(" "));
+    dbg("sync:run", "cwd   →", ROOT);
+
+    const proc = spawn(cmd, args, {
+      cwd: ROOT,
+      env: { ...process.env, FORCE_COLOR: "0" },
     });
+
+    dbg("sync:run", "pid   →", proc.pid);
 
     const sender = event.sender;
 
-    proc.stdout.on("data", (data: Buffer) =>
-      sender.send("sync:line", { line: data.toString() })
-    );
-    proc.stderr.on("data", (data: Buffer) =>
-      sender.send("sync:line", { line: data.toString(), error: true })
-    );
+    proc.stdout.on("data", (data: Buffer) => {
+      const line = data.toString();
+      process.stdout.write("[stdout] " + line);
+      sender.send("sync:line", { line });
+    });
+
+    proc.stderr.on("data", (data: Buffer) => {
+      const line = data.toString();
+      process.stderr.write("[stderr] " + line);
+      sender.send("sync:line", { line, error: true });
+    });
+
+    proc.on("error", (err) => {
+      dbg("sync:run", "proc error →", err.message);
+      sender.send("sync:line", { line: `❌ spawn error: ${err.message}\n`, error: true });
+      sender.send("sync:line", { done: true, code: 1 });
+      resolve(1);
+    });
+
     proc.on("close", (code) => {
+      dbg("sync:run", "exit code →", code);
       sender.send("sync:line", { done: true, code: code ?? 0 });
       resolve(code ?? 0);
     });
