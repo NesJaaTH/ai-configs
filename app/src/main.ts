@@ -60,7 +60,10 @@ function toShellPath(p: string): string {
   return p.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_, d) => `/${d.toLowerCase()}`);
 }
 
-const ROOT       = app.isPackaged ? join(process.resourcesPath, "app") : join(__dirname, "..", "..");
+// app.getAppPath() = folder ที่มี package.json → app/
+const APP_DIR    = app.getAppPath();
+const DIST_DIR   = join(APP_DIR, "dist");
+const ROOT       = app.isPackaged ? join(process.resourcesPath, "app") : join(APP_DIR, "..");
 const SHELL_ROOT = toShellPath(ROOT);
 const BASH       = findBash();
 
@@ -109,8 +112,8 @@ function getGitLog(): string {
 let win: BrowserWindow;
 
 function createWindow() {
-  dbg("createWindow", "preload =", join(__dirname, "preload.js"));
-  dbg("createWindow", "html    =", join(__dirname, "..", "renderer", "index.html"));
+  dbg("createWindow", "preload =", join(DIST_DIR, "preload.js"));
+  dbg("createWindow", "html    =", join(APP_DIR, "renderer", "index.html"));
 
   win = new BrowserWindow({
     width: 1100,
@@ -121,24 +124,27 @@ function createWindow() {
     backgroundColor: "#0d1117",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     webPreferences: {
-      preload: join(__dirname, "preload.js"),
+      preload: join(DIST_DIR, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
-  win.loadFile(join(__dirname, "..", "renderer", "index.html"));
+  win.loadFile(join(APP_DIR, "renderer", "index.html"));
 }
 
 app.whenReady().then(() => {
   console.log("\n========== AI Configs Debug ==========");
   console.log("platform  :", process.platform);
   console.log("packaged  :", app.isPackaged);
-  console.log("__dirname :", __dirname);
+  console.log("APP_DIR   :", APP_DIR);
+  console.log("DIST_DIR  :", DIST_DIR);
   console.log("ROOT      :", ROOT);
   console.log("SHELL_ROOT:", SHELL_ROOT);
   console.log("BASH      :", BASH);
   console.log("bash ok   :", existsSync(BASH));
+  console.log("preload ok:", existsSync(join(DIST_DIR, "preload.js")));
+  console.log("html ok   :", existsSync(join(APP_DIR, "renderer", "index.html")));
   console.log("conf ok   :", existsSync(join(ROOT, "projects.conf")));
   console.log("sync.sh ok:", existsSync(join(ROOT, "sync.sh")));
   console.log("======================================\n");
