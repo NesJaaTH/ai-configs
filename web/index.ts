@@ -1,5 +1,6 @@
 import { readFileSync, existsSync, statSync } from "fs";
 import { join } from "path";
+import { $ } from "bun";
 
 const PORT = 3000;
 
@@ -57,14 +58,12 @@ function parseProjects() {
 
 // Git log
 async function gitLog() {
-  const proc = Bun.spawn(["git", "log", "--oneline", "-8"], {
-    cwd: SHELL_ROOT,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const text = await new Response(proc.stdout).text();
-  await proc.exited;
-  return text.trim();
+  try {
+    const result = await $`git -C ${ROOT} log --oneline -8`.quiet().text();
+    return result.trim();
+  } catch {
+    return "";
+  }
 }
 
 Bun.serve({
@@ -100,14 +99,16 @@ Bun.serve({
 
       const stream = new ReadableStream({
         async start(controller) {
+          const bashCmd = ENV === "gitbash" ? "bash.exe" : "bash";
           const args = project
-            ? ["bash", `${SHELL_ROOT}/sync.sh`, project]
-            : ["bash", `${SHELL_ROOT}/sync.sh`];
+            ? [bashCmd, `${SHELL_ROOT}/sync.sh`, project]
+            : [bashCmd, `${SHELL_ROOT}/sync.sh`];
 
           const proc = Bun.spawn(args, {
-            cwd: ROOT,
+            cwd: SHELL_ROOT,
             stdout: "pipe",
             stderr: "pipe",
+            env: process.env,
           });
 
           const decoder = new TextDecoder();
