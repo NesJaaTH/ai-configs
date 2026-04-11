@@ -115,14 +115,20 @@ if ! git remote get-url origin > /dev/null 2>&1; then
   echo "✅ Remote added"
 fi
 
+# หา gh binary — รองรับ WSL (ใช้ gh.exe จาก Windows ได้)
+GH_CMD=""
+if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
+  GH_CMD="gh"
+elif command -v gh.exe &>/dev/null && gh.exe auth status &>/dev/null 2>&1; then
+  GH_CMD="gh.exe"
+fi
+
 # ตั้ง git identity จาก gh ถ้ายังไม่มี
-if command -v gh &>/dev/null && gh auth status &>/dev/null; then
-  if [ -z "$(git config user.email)" ]; then
-    GH_EMAIL=$(gh api user/emails --jq '[.[] | select(.primary==true)] | .[0].email' 2>/dev/null)
-    GH_NAME=$(gh api user --jq '.name // .login' 2>/dev/null)
-    [ -n "$GH_EMAIL" ] && git config --global user.email "$GH_EMAIL"
-    [ -n "$GH_NAME" ]  && git config --global user.name  "$GH_NAME"
-  fi
+if [ -n "$GH_CMD" ] && [ -z "$(git config user.email)" ]; then
+  GH_EMAIL=$($GH_CMD api user/emails --jq '[.[] | select(.primary==true)] | .[0].email' 2>/dev/null)
+  GH_NAME=$($GH_CMD api user --jq '.name // .login' 2>/dev/null)
+  [ -n "$GH_EMAIL" ] && git config --global user.email "$GH_EMAIL"
+  [ -n "$GH_NAME" ]  && git config --global user.name  "$GH_NAME"
 fi
 
 git add -A
@@ -139,12 +145,12 @@ else
   fi
 fi
 
-if command -v gh &>/dev/null && gh auth status &>/dev/null; then
-  if git -c credential.helper='!gh auth git-credential' push origin HEAD 2>&1; then
+if [ -n "$GH_CMD" ]; then
+  if git -c "credential.helper=!$GH_CMD auth git-credential" push origin HEAD 2>&1; then
     echo "✅ Pushed to origin"
   else
     echo "❌ Push failed"
   fi
 else
-  echo "❌ Push failed — run: gh auth login"
+  echo "❌ Push failed — run: gh auth login  (or install gh in WSL)"
 fi
