@@ -1,8 +1,35 @@
 import { readFileSync, existsSync, statSync } from "fs";
 import { join } from "path";
 
-const ROOT = join(import.meta.dir, "..");
 const PORT = 3000;
+
+// Detect environment
+function detectEnv(): "wsl" | "gitbash" | "macos" | "linux" {
+  if (process.platform === "win32") return "gitbash";
+  try {
+    const v = readFileSync("/proc/version", "utf-8").toLowerCase();
+    if (v.includes("microsoft")) return "wsl";
+  } catch {}
+  return process.platform === "darwin" ? "macos" : "linux";
+}
+
+const ENV = detectEnv();
+
+// Convert Windows path → Unix path for use in bash
+function toShellPath(p: string): string {
+  if (ENV === "wsl") {
+    // D:\git\... or D:/git/... → /mnt/d/git/...
+    return p.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_, d) => `/mnt/${d.toLowerCase()}`);
+  }
+  if (ENV === "gitbash") {
+    // D:\git\... → /d/git/...
+    return p.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_, d) => `/${d.toLowerCase()}`);
+  }
+  return p;
+}
+
+const ROOT = join(import.meta.dir, "..");       // for Node fs calls
+const SHELL_ROOT = toShellPath(ROOT);           // for bash args
 
 // Parse projects.conf
 function parseProjects() {
@@ -31,7 +58,7 @@ function parseProjects() {
 // Git log
 async function gitLog() {
   const proc = Bun.spawn(["git", "log", "--oneline", "-8"], {
-    cwd: ROOT,
+    cwd: SHELL_ROOT,
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -74,8 +101,8 @@ Bun.serve({
       const stream = new ReadableStream({
         async start(controller) {
           const args = project
-            ? ["bash", join(ROOT, "sync.sh"), project]
-            : ["bash", join(ROOT, "sync.sh")];
+            ? ["bash", `${SHELL_ROOT}/sync.sh`, project]
+            : ["bash", `${SHELL_ROOT}/sync.sh`];
 
           const proc = Bun.spawn(args, {
             cwd: ROOT,
