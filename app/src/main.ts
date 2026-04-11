@@ -1,4 +1,6 @@
 import { app, BrowserWindow, ipcMain } from "electron";
+
+app.commandLine.appendSwitch("disable-features", "AutofillServerCommunication");
 import { join } from "path";
 import { existsSync, readFileSync, statSync } from "fs";
 import { execFileSync, spawnSync, spawn } from "child_process";
