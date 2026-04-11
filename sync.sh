@@ -12,7 +12,7 @@ if [ ! -f "$CONF_FILE" ]; then
   exit 1
 fi
 
-# ตรวจสอบ environment (macOS / Git Bash / WSL / Linux)
+# ตรวจสอบ environment
 detect_env() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "macos"
@@ -27,35 +27,57 @@ detect_env() {
 
 ENV=$(detect_env)
 
-# แปลง Windows path → Unix path ตาม environment
+# แปลง Windows path → Unix path
 normalize_path() {
   local path="$1"
-
   path="${path//\\//}"
-
   if [[ "$path" =~ ^([a-zA-Z]):/(.*)$ ]]; then
     local drive="${BASH_REMATCH[1],}"
     local rest="${BASH_REMATCH[2]}"
-    if [[ "$ENV" == "wsl" ]]; then
-      path="/mnt/$drive/$rest"
-    else
-      path="/$drive/$rest"
-    fi
+    [[ "$ENV" == "wsl" ]] && path="/mnt/$drive/$rest" || path="/$drive/$rest"
   elif [[ "$path" =~ ^/([a-zA-Z])(/.*)?$ ]] && [[ "$ENV" == "wsl" ]]; then
-    local drive="${BASH_REMATCH[1],}"
-    local rest="${BASH_REMATCH[2]}"
-    path="/mnt/$drive$rest"
+    path="/mnt/${BASH_REMATCH[1],}${BASH_REMATCH[2]}"
   fi
-
   echo "$path"
 }
 
+# Progress bar
+progress_bar() {
+  local current=$1
+  local total=$2
+  local width=30
+  local filled=$(( current * width / total ))
+  local empty=$(( width - filled ))
+  local bar=""
+  for ((i=0; i<filled; i++)); do bar+="█"; done
+  for ((i=0; i<empty; i++));  do bar+="░"; done
+  printf "\r  [%s] %d/%d" "$bar" "$current" "$total"
+}
+
+# นับจำนวน project ทั้งหมด
+count_projects() {
+  local count=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line//$'\r'/}"
+    [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+    local proj
+    proj=$(echo "$line" | cut -d':' -f1 | xargs)
+    if [ -z "$SPECIFIC_PROJECT" ] || [ "$proj" == "$SPECIFIC_PROJECT" ]; then
+      ((count++))
+    fi
+  done < "$CONF_FILE"
+  echo "$count"
+}
+
+TOTAL=$(count_projects)
+CURRENT=0
 SUCCESS=0
 SKIP=0
 FAIL=0
 
 echo "=============================="
 echo " AI Configs Sync  [$ENV]"
+echo " Total projects  : $TOTAL"
 echo "=============================="
 
 while IFS= read -r line || [[ -n "$line" ]]; do
@@ -70,30 +92,32 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     continue
   fi
 
+  ((CURRENT++))
+
   echo ""
-  echo "📦 Project : $PROJECT"
-  echo "📂 Target  : $TARGET"
+  progress_bar "$CURRENT" "$TOTAL"
+  echo ""
+  echo "  📦 $PROJECT"
+  echo "  📂 $TARGET"
 
   if [ ! -d "$TARGET" ]; then
-    echo "⚠️  Skipped — target path not found"
+    echo "  ⚠️  Skipped — target path not found"
     ((SKIP++))
     continue
   fi
 
-  # Collect: คัดลอก AI configs จาก target → projects/PROJECT/
   DEST="$AI_CONFIGS_DIR/projects/$PROJECT"
   mkdir -p "$DEST"
   for item in CLAUDE.md .claude .cursor .agent .gemini .toh; do
-    if [ -e "$TARGET/$item" ]; then
-      cp -r "$TARGET/$item" "$DEST/"
-    fi
+    [ -e "$TARGET/$item" ] && cp -r "$TARGET/$item" "$DEST/"
   done
-  echo "📥 Collected configs → projects/$PROJECT/"
+  echo "  📥 Collected → projects/$PROJECT/"
 
   ((SUCCESS++))
 
 done < "$CONF_FILE"
 
+echo ""
 echo ""
 echo "=============================="
 echo " ✅ Success : $SUCCESS"
@@ -114,13 +138,12 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
   exit 0
 fi
 
-# Set remote ถ้ายังไม่มี
 if ! git remote get-url origin > /dev/null 2>&1; then
   git remote add origin https://github.com/NesJaaTH/ai-configs.git
   echo "✅ Remote added"
 fi
 
-# หา gh binary — รองรับ WSL (ใช้ gh.exe จาก Windows ได้)
+# หา gh binary — รองรับ WSL
 GH_CMD=""
 if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
   GH_CMD="gh"
