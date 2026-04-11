@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun add:*)",
+      "Bash(bun run dev)",
+      "Bash(cat:*)",
+      "Bash(bun run build)",
+      "Bash(taskkill:*)"
+    ]
+  }
+}

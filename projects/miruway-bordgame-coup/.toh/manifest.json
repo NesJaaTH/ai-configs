@@ -1,0 +1,15 @@
+{
+  "version": "1.8.1",
+  "installedAt": "2026-03-19T13:19:37.296Z",
+  "targetDir": "D:\\git\\Miruway\\Miruway-Bordgame-Coup",
+  "ides": [
+    "claude"
+  ],
+  "components": {
+    "skills": true,
+    "agents": true,
+    "commands": true,
+    "templates": true,
+    "memory": true
+  }
+}

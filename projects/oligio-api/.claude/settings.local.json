@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(bunx tsc --noEmit)",
+      "Bash(grep -r \"authPlugin\\\\|requireAuth\\\\|\\\\.use\\(auth\" /d/git/Oligio/api/src/routes/*.ts)",
+      "Bash(pip install:*)",
+      "Bash(python -c \"\nimport requests, json\nr = requests.get\\('https://wontech-asia.com/api/clinics?offset=0', headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'}, timeout=30\\)\ndata = r.json\\(\\)\nprint\\('keys:', list\\(data.keys\\(\\)\\)\\)\nprint\\('hasMore:', data.get\\('hasMore'\\)\\)\nprint\\('total keys \\(non-html\\):', {k:v for k,v in data.items\\(\\) if k != 'html'}\\)\n\")",
+      "Bash(python scrape_clinics.py)",
+      "Bash(cd D:/git/Oligio/api && cat package.json | python -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\(json.dumps\\(p.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(cd D:/git/Oligio/api && python -c \"\nimport csv\nwith open\\('clinics.csv', encoding='utf-8'\\) as f:\n    rows = list\\(csv.DictReader\\(f\\)\\)[:30]\nfor r in rows:\n    print\\(r['name']\\)\n\")",
+      "Bash(cd D:/git/Oligio/api && bunx drizzle-kit push 2>&1)",
+      "Bash(gh pr:*)"
+    ]
+  }
+}

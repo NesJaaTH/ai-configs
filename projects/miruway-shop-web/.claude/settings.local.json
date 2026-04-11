@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.reactbits.dev)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(bun x:*)",
+      "Bash(node -e \":*)",
+      "Bash(bun run:*)"
+    ]
+  }
+}

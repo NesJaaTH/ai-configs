@@ -1,0 +1,16 @@
+{
+  "version": "1.8.1",
+  "installedAt": "2026-03-06T12:51:20.362Z",
+  "targetDir": "D:\\git\\Oligio\\api",
+  "ides": [
+    "claude",
+    "cursor"
+  ],
+  "components": {
+    "skills": true,
+    "agents": true,
+    "commands": true,
+    "templates": true,
+    "memory": true
+  }
+}
