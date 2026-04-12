@@ -67,9 +67,29 @@ const ROOT       = app.isPackaged ? join(process.resourcesPath, "app") : join(AP
 const SHELL_ROOT = toShellPath(ROOT);
 const BASH       = findBash();
 
+// ---- Read config.json for DATA_ROOT (separate private configs repo) ----
+function readDataRoot(): string {
+  const configPath = join(ROOT, "config.json");
+  if (existsSync(configPath)) {
+    try {
+      const cfg = JSON.parse(readFileSync(configPath, "utf-8"));
+      if (cfg.dataRoot) {
+        dbg("config", "DATA_ROOT from config.json →", cfg.dataRoot);
+        return cfg.dataRoot;
+      }
+    } catch (e) {
+      dbg("config", "failed to parse config.json →", e);
+    }
+  }
+  dbg("config", "no config.json — using ROOT as DATA_ROOT");
+  return ROOT;
+}
+
+const DATA_ROOT = readDataRoot();
+
 // ---- Parse projects.conf ----
 function parseProjects() {
-  const confPath = join(ROOT, "projects.conf");
+  const confPath = join(DATA_ROOT, "projects.conf");
   dbg("parseProjects", "conf =", confPath, existsSync(confPath) ? "✅" : "❌ NOT FOUND");
   if (!existsSync(confPath)) return [];
 
@@ -82,7 +102,7 @@ function parseProjects() {
 
   return lines.map((line) => {
     const [name, ...rest] = line.split(":");
-    const projectDir = join(ROOT, "projects", name.trim());
+    const projectDir = join(DATA_ROOT, "projects", name.trim());
     const hasConfig  = existsSync(projectDir);
     const entry = {
       name:     name.trim(),
@@ -97,8 +117,8 @@ function parseProjects() {
 
 // ---- Git log ----
 function getGitLog(): string {
-  dbg("getGitLog", "cwd =", ROOT);
-  const r = spawnSync("git", ["-C", ROOT, "log", "--oneline", "-8"], { encoding: "utf-8" });
+  dbg("getGitLog", "cwd =", DATA_ROOT);
+  const r = spawnSync("git", ["-C", DATA_ROOT, "log", "--oneline", "-8"], { encoding: "utf-8" });
   if (r.error) {
     dbg("getGitLog", "error →", r.error.message);
     return "";
@@ -178,46 +198,43 @@ ipcMain.handle("git:log", () => {
 ipcMain.handle("sync:run", (event, project: string) => {
   dbg("IPC", "sync:run called, project =", project || "(all)");
 
+  const sender = event.sender;
+  const syncScript = join(APP_DIR, "src", "sync.ts");
+  // argv: sync.ts [project] [dataRoot]
+  const args = [syncScript, project, DATA_ROOT];
+
+  dbg("IPC", "spawning bun run", syncScript, "project =", project || "(all)", "dataRoot =", DATA_ROOT);
+
   return new Promise<number>((resolve) => {
-    const scriptArgs = project ? [project] : [];
-    const cmd  = BASH;
-    const args = [`${SHELL_ROOT}/sync.sh`, ...scriptArgs];
-
-    dbg("sync:run", "spawn →", cmd, args.join(" "));
-    dbg("sync:run", "cwd   →", ROOT);
-
-    const proc = spawn(cmd, args, {
+    const proc = spawn("bun", ["run", ...args], {
       cwd: ROOT,
-      env: { ...process.env, FORCE_COLOR: "0" },
+      env: { ...process.env },
     });
 
-    dbg("sync:run", "pid   →", proc.pid);
-
-    const sender = event.sender;
-
-    proc.stdout.on("data", (data: Buffer) => {
-      const line = data.toString();
-      process.stdout.write("[stdout] " + line);
-      sender.send("sync:line", { line });
+    proc.stdout.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      process.stdout.write("[out] " + text);
+      sender.send("sync:line", { line: text, error: false });
     });
 
-    proc.stderr.on("data", (data: Buffer) => {
-      const line = data.toString();
-      process.stderr.write("[stderr] " + line);
-      sender.send("sync:line", { line, error: true });
-    });
-
-    proc.on("error", (err) => {
-      dbg("sync:run", "proc error →", err.message);
-      sender.send("sync:line", { line: `❌ spawn error: ${err.message}\n`, error: true });
-      sender.send("sync:line", { done: true, code: 1 });
-      resolve(1);
+    proc.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      process.stderr.write("[err] " + text);
+      sender.send("sync:line", { line: text, error: true });
     });
 
     proc.on("close", (code) => {
-      dbg("sync:run", "exit code →", code);
-      sender.send("sync:line", { done: true, code: code ?? 0 });
-      resolve(code ?? 0);
+      const exitCode = code ?? 1;
+      dbg("IPC", "bun sync.ts exited with code", exitCode);
+      sender.send("sync:line", { done: true, code: exitCode });
+      resolve(exitCode);
+    });
+
+    proc.on("error", (err) => {
+      dbg("IPC", "spawn error →", err.message);
+      sender.send("sync:line", { line: `❌ spawn error: ${err.message}\n`, error: true });
+      sender.send("sync:line", { done: true, code: 1 });
+      resolve(1);
     });
   });
 });

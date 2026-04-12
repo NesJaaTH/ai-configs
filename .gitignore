@@ -1,0 +1,10 @@
+# Personal data repo path (copy config.json.example → config.json and edit)
+config.json
+
+# Electron / Node
+app/node_modules/
+app/dist/
+
+# OS
+.DS_Store
+Thumbs.db
