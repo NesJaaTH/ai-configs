@@ -8,5 +8,13 @@ import_electron.contextBridge.exposeInMainWorld("api", {
     const handler = (_, data) => cb(data);
     import_electron.ipcRenderer.on("sync:line", handler);
     return () => import_electron.ipcRenderer.removeListener("sync:line", handler);
-  }
+  },
+  getConfig: () => import_electron.ipcRenderer.invoke("config:info"),
+  setSyncItems: (items) => import_electron.ipcRenderer.invoke("config:setSyncItems", items),
+  setRemote: (url) => import_electron.ipcRenderer.invoke("config:setRemote", url),
+  openExternal: (url) => import_electron.ipcRenderer.invoke("shell:open", url),
+  readSetup: () => import_electron.ipcRenderer.invoke("setup:read"),
+  openDirDialog: () => import_electron.ipcRenderer.invoke("dialog:openDir"),
+  previewSetup: (project) => import_electron.ipcRenderer.invoke("setup:preview", project),
+  runSetup: (opts) => import_electron.ipcRenderer.invoke("setup:run", opts)
 });

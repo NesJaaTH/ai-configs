@@ -3,10 +3,20 @@ import { $ } from "bun";
 import { join } from "path";
 import { existsSync, mkdirSync, cpSync, copyFileSync, statSync, rmSync } from "fs";
 
-const ROOT     = join(import.meta.dir, "..", "..");
-const project  = process.argv[2] ?? "";
-// DATA_ROOT: where projects.conf and projects/ live (may be a separate private repo)
+const ROOT      = join(import.meta.dir, "..", "..");
+const project   = process.argv[2] ?? "";
 const DATA_ROOT = process.argv[3] ?? ROOT;
+
+// ---- Read sync items from config.json (falls back to defaults) ----
+const DEFAULT_ITEMS = ["CLAUDE.md", ".claude", ".cursor", ".agent", ".gemini", ".toh"];
+let SYNC_ITEMS = DEFAULT_ITEMS;
+const configPath = join(ROOT, "config.json");
+if (existsSync(configPath)) {
+  try {
+    const cfg = JSON.parse(await Bun.file(configPath).text());
+    if (Array.isArray(cfg.syncItems) && cfg.syncItems.length > 0) SYNC_ITEMS = cfg.syncItems;
+  } catch {}
+}
 
 // ---- Helpers ----
 function pct(current: number, total: number): string {
@@ -69,7 +79,7 @@ for (let i = 0; i < toSync.length; i++) {
 
   const itemResults: string[] = [];
   let copied = 0;
-  for (const item of ["CLAUDE.md", ".claude", ".cursor", ".agent", ".gemini", ".toh"]) {
+  for (const item of SYNC_ITEMS) {
     const src = join(target, item);
     if (!existsSync(src)) continue;
     try {
