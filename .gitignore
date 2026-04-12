@@ -1,6 +1,10 @@
 # Personal data repo path (copy config.json.example → config.json and edit)
 config.json
 
+# Collected configs and project list (live in ai-configs-data private repo)
+projects/
+projects.conf
+
 # Electron / Node
 app/node_modules/
 app/dist/
