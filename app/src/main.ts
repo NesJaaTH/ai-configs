@@ -1,9 +1,9 @@
-import { app, BrowserWindow, ipcMain, Menu, globalShortcut } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, globalShortcut, shell, dialog } from "electron";
 
 app.commandLine.appendSwitch("disable-features", "AutofillServerCommunication");
 
 import { join } from "path";
-import { existsSync, readFileSync, statSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, statSync } from "fs";
 import { execFileSync, spawnSync, spawn } from "child_process";
 
 // ---- Debug logger ----
@@ -193,6 +193,147 @@ ipcMain.handle("projects:list", () => {
 ipcMain.handle("git:log", () => {
   dbg("IPC", "git:log called");
   return getGitLog();
+});
+
+ipcMain.handle("config:info", () => {
+  dbg("IPC", "config:info called, DATA_ROOT =", DATA_ROOT);
+  const r = spawnSync("git", ["-C", DATA_ROOT, "remote", "get-url", "origin"], { encoding: "utf-8" });
+  const remoteUrl = r.stdout?.trim() ?? "";
+  const repoSlug = remoteUrl
+    .replace(/^https?:\/\/github\.com\//, "")
+    .replace(/\.git$/, "")
+    .trim();
+  const folderName = DATA_ROOT.replace(/\\/g, "/").split("/").pop() ?? DATA_ROOT;
+
+  const DEFAULT_ITEMS = ["CLAUDE.md", ".claude", ".cursor", ".agent", ".gemini", ".toh"];
+  let syncItems = DEFAULT_ITEMS;
+  const cfgPath = join(ROOT, "config.json");
+  if (existsSync(cfgPath)) {
+    try {
+      const cfg = JSON.parse(readFileSync(cfgPath, "utf-8"));
+      if (Array.isArray(cfg.syncItems) && cfg.syncItems.length > 0) syncItems = cfg.syncItems;
+    } catch {}
+  }
+
+  return {
+    dataRoot:  DATA_ROOT,
+    repoSlug:  repoSlug || folderName,
+    remoteUrl: remoteUrl.startsWith("https://") ? remoteUrl.replace(/\.git$/, "") : "",
+    syncItems,
+  };
+});
+
+ipcMain.handle("config:setSyncItems", (_, items: string[]) => {
+  const cfgPath = join(ROOT, "config.json");
+  let cfg: Record<string, unknown> = {};
+  if (existsSync(cfgPath)) {
+    try { cfg = JSON.parse(readFileSync(cfgPath, "utf-8")); } catch {}
+  }
+  cfg.syncItems = items;
+  writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + "\n", "utf-8");
+  dbg("IPC", "config:setSyncItems →", items);
+  return true;
+});
+
+ipcMain.handle("config:setRemote", (_, url: string) => {
+  dbg("IPC", "config:setRemote →", url);
+  const check = spawnSync("git", ["-C", DATA_ROOT, "remote", "get-url", "origin"], { encoding: "utf-8" });
+  const cmd   = check.status === 0 ? "set-url" : "add";
+  const result = spawnSync("git", ["-C", DATA_ROOT, "remote", cmd, "origin", url], { encoding: "utf-8" });
+  if (result.status !== 0) throw new Error(result.stderr?.trim() || "git remote failed");
+  return true;
+});
+
+ipcMain.handle("shell:open", (_, url: string) => {
+  if (url.startsWith("https://")) shell.openExternal(url);
+});
+
+ipcMain.handle("setup:read", () => {
+  const p = join(ROOT, "setup.sh");
+  dbg("IPC", "setup:read →", p, existsSync(p) ? "✅" : "❌");
+  if (!existsSync(p)) return null;
+  return readFileSync(p, "utf-8");
+});
+
+// ---- Open directory picker ----
+ipcMain.handle("dialog:openDir", async () => {
+  const result = await dialog.showOpenDialog(win, {
+    properties: ["openDirectory"],
+    title: "Select project directory",
+  });
+  return result.canceled ? null : (result.filePaths[0] ?? null);
+});
+
+// ---- Read configured sync items (shared helper) ----
+function readSyncItems(): string[] {
+  const defaults = ["CLAUDE.md", ".claude", ".cursor", ".agent", ".gemini", ".toh"];
+  const cfgPath  = join(ROOT, "config.json");
+  if (!existsSync(cfgPath)) return defaults;
+  try {
+    const cfg = JSON.parse(readFileSync(cfgPath, "utf-8"));
+    if (Array.isArray(cfg.syncItems) && cfg.syncItems.length > 0) return cfg.syncItems;
+  } catch {}
+  return defaults;
+}
+
+// ---- Preview what setup:run will copy (without doing it) ----
+ipcMain.handle("setup:preview", (_, project: string) => {
+  if (!project) return { hasProjectDir: false, items: [] };
+  const projectDir = join(DATA_ROOT, "projects", project);
+  const hasProjectDir = existsSync(projectDir);
+  const items: { name: string; isDir: boolean }[] = [];
+
+  if (hasProjectDir) {
+    for (const name of readSyncItems()) {
+      const src = join(projectDir, name);
+      if (existsSync(src)) items.push({ name, isDir: statSync(src).isDirectory() });
+    }
+  }
+
+  return { hasProjectDir, items };
+});
+
+// ---- Run setup: copy saved configs into a target directory ----
+ipcMain.handle("setup:run", (_, { project, targetPath }: { project: string; targetPath: string }) => {
+  dbg("IPC", "setup:run project =", project, "target =", targetPath);
+
+  if (!existsSync(targetPath)) {
+    return { ok: false, error: `Target path not found: ${targetPath}` };
+  }
+
+  const projectDir = join(DATA_ROOT, "projects", project);
+  if (!existsSync(projectDir)) {
+    return { ok: false, error: `No configs synced for "${project}" yet — run Sync first.` };
+  }
+
+  const ITEMS = readSyncItems();
+  const results: { name: string; status: "copied" | "skipped" | "error"; note?: string }[] = [];
+
+  for (const item of ITEMS) {
+    const src = join(projectDir, item);
+    if (!existsSync(src)) continue;
+
+    const dest = join(targetPath, item);
+    try {
+      if (statSync(src).isDirectory()) {
+        if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+        cpSync(src, dest, { recursive: true, force: true });
+      } else {
+        if (existsSync(dest)) rmSync(dest, { force: true });
+        copyFileSync(src, dest);
+      }
+      results.push({ name: item, status: "copied" });
+    } catch (e: any) {
+      dbg("setup:run", "copy error", item, e.message);
+      results.push({ name: item, status: "error", note: e.message });
+    }
+  }
+
+  if (results.length === 0) {
+    return { ok: false, error: `No config files found for project "${project}".` };
+  }
+
+  return { ok: true, results };
 });
 
 ipcMain.handle("sync:run", (event, project: string) => {
