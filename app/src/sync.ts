@@ -1,57 +1,27 @@
 #!/usr/bin/env bun
 import { $ } from "bun";
 import { join } from "path";
-import { existsSync, mkdirSync, cpSync, copyFileSync, statSync, rmSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
+import { listProjects }  from "./repositories/projectRepository";
+import { readSyncItems } from "./repositories/configRepository";
+import { copyItem }      from "./lib/fsUtils";
 
 const ROOT      = join(import.meta.dir, "..", "..");
 const project   = process.argv[2] ?? "";
 const DATA_ROOT = process.argv[3] ?? ROOT;
 
-// ---- Read sync items from config.json (falls back to defaults) ----
-const DEFAULT_ITEMS = ["CLAUDE.md", ".claude", ".cursor", ".agent", ".gemini", ".toh"];
-let SYNC_ITEMS = DEFAULT_ITEMS;
-const configPath = join(ROOT, "config.json");
-if (existsSync(configPath)) {
-  try {
-    const cfg = JSON.parse(await Bun.file(configPath).text());
-    if (Array.isArray(cfg.syncItems) && cfg.syncItems.length > 0) SYNC_ITEMS = cfg.syncItems;
-  } catch {}
-}
-
-// ---- Helpers ----
-function pct(current: number, total: number): string {
-  const p = Math.round((current / total) * 100);
-  return `[${String(p).padStart(3)}%]`;
-}
-
-function copyItem(src: string, dest: string) {
-  if (statSync(src).isDirectory()) {
-    // Remove dest first to avoid EPERM on read-only files inside
-    if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
-    cpSync(src, dest, { recursive: true, force: true });
-  } else {
-    if (existsSync(dest)) rmSync(dest, { force: true });
-    copyFileSync(src, dest);
-  }
-}
-
-// ---- Parse projects.conf ----
-const conf     = await Bun.file(join(DATA_ROOT, "projects.conf")).text();
-const projects = conf
-  .split("\n")
-  .map((l) => l.replace(/\r/, "").trim())
-  .filter((l) => l && !l.startsWith("#"))
-  .map((line) => {
-    const [name, ...rest] = line.split(":");
-    return { name: name.trim(), path: rest.join(":").trim() };
-  });
-
-const toSync = project ? projects.filter((p) => p.name === project) : projects;
-const total  = toSync.length;
+const SYNC_ITEMS = readSyncItems(join(ROOT, "config.json"));
+const projects   = listProjects(DATA_ROOT);
+const toSync     = project ? projects.filter((p) => p.name === project) : projects;
+const total      = toSync.length;
 
 if (total === 0) {
   console.log(`⚠️  No projects found${project ? ` matching "${project}"` : ""}`);
   process.exit(0);
+}
+
+function pct(current: number, total: number): string {
+  return `[${String(Math.round((current / total) * 100)).padStart(3)}%]`;
 }
 
 console.log(`\n==============================`);
@@ -63,10 +33,9 @@ let success = 0, skipped = 0, failed = 0;
 
 for (let i = 0; i < toSync.length; i++) {
   const p      = toSync[i];
-  const idx    = i + 1;
   const target = p.path.replace(/\\/g, "/");
 
-  process.stdout.write(`\n ${pct(idx, total)} ${p.name}`);
+  process.stdout.write(`\n ${pct(i + 1, total)} ${p.name}`);
 
   if (!existsSync(target)) {
     console.log(`  ⚠️  path not found`);
@@ -79,6 +48,7 @@ for (let i = 0; i < toSync.length; i++) {
 
   const itemResults: string[] = [];
   let copied = 0;
+
   for (const item of SYNC_ITEMS) {
     const src = join(target, item);
     if (!existsSync(src)) continue;
@@ -86,7 +56,7 @@ for (let i = 0; i < toSync.length; i++) {
       copyItem(src, join(dest, item));
       itemResults.push(`✅ ${item}`);
       copied++;
-    } catch (e: any) {
+    } catch {
       itemResults.push(`❌ ${item}`);
       failed++;
     }
@@ -115,7 +85,6 @@ console.log(`==============================`);
 try {
   await $`gh auth status`.quiet();
 
-  // Set git identity from gh if not set
   const hasEmail = (await $`git -C ${DATA_ROOT} config user.email`.nothrow().text()).trim();
   if (!hasEmail) {
     const email = (await $`gh api user/emails --jq '[.[] | select(.primary==true)] | .[0].email'`.nothrow().text()).trim();
@@ -135,7 +104,6 @@ try {
     console.log(` ✅ Committed`);
   }
 
-  // Increase buffer to avoid HTTP 408 on large pushes
   await $`git -C ${DATA_ROOT} config http.postBuffer 524288000`.nothrow();
 
   let pushed = false;

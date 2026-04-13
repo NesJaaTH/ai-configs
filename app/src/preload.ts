@@ -1,19 +1,21 @@
 import { contextBridge, ipcRenderer } from "electron";
-
-type SyncPayload = {
-  line?:  string;
-  error?: boolean;
-  done?:  boolean;
-  code?:  number;
-};
+import type {
+  ProjectEntry,
+  ConfigInfo,
+  SetupPreviewResult,
+  SetupRunResult,
+  SyncPayload,
+} from "./types";
 
 contextBridge.exposeInMainWorld("api", {
-  getProjects: (): Promise<any[]> =>
+  // Projects
+  getProjects: (): Promise<ProjectEntry[]> =>
     ipcRenderer.invoke("projects:list"),
 
-  getGitLog: (): Promise<string> =>
-    ipcRenderer.invoke("git:log"),
+  saveProjects: (entries: { name: string; path: string }[]): Promise<boolean> =>
+    ipcRenderer.invoke("projects:save", entries),
 
+  // Sync
   sync: (project: string): Promise<number> =>
     ipcRenderer.invoke("sync:run", project),
 
@@ -23,7 +25,12 @@ contextBridge.exposeInMainWorld("api", {
     return () => ipcRenderer.removeListener("sync:line", handler);
   },
 
-  getConfig: (): Promise<{ dataRoot: string; repoSlug: string; remoteUrl: string; syncItems: string[] }> =>
+  // Git
+  getGitLog: (): Promise<string> =>
+    ipcRenderer.invoke("git:log"),
+
+  // Config
+  getConfig: (): Promise<ConfigInfo> =>
     ipcRenderer.invoke("config:info"),
 
   setSyncItems: (items: string[]): Promise<boolean> =>
@@ -32,21 +39,20 @@ contextBridge.exposeInMainWorld("api", {
   setRemote: (url: string): Promise<boolean> =>
     ipcRenderer.invoke("config:setRemote", url),
 
-  openExternal: (url: string): Promise<void> =>
-    ipcRenderer.invoke("shell:open", url),
-
+  // Setup / deploy
   readSetup: (): Promise<string | null> =>
     ipcRenderer.invoke("setup:read"),
 
-  openDirDialog: (): Promise<string | null> =>
-    ipcRenderer.invoke("dialog:openDir"),
-
-  previewSetup: (project: string): Promise<{ hasProjectDir: boolean; items: { name: string; isDir: boolean; fromBase?: boolean }[] }> =>
+  previewSetup: (project: string): Promise<SetupPreviewResult> =>
     ipcRenderer.invoke("setup:preview", project),
 
-  runSetup: (opts: { project: string; targetPath: string }): Promise<{ ok: boolean; error?: string; results?: { name: string; status: string; note?: string }[] }> =>
+  runSetup: (opts: { project: string; targetPath: string }): Promise<SetupRunResult> =>
     ipcRenderer.invoke("setup:run", opts),
 
-  saveProjects: (entries: { name: string; path: string }[]): Promise<boolean> =>
-    ipcRenderer.invoke("projects:save", entries),
+  // Shell / dialog
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke("shell:open", url),
+
+  openDirDialog: (): Promise<string | null> =>
+    ipcRenderer.invoke("dialog:openDir"),
 });
