@@ -1,5 +1,25 @@
+/**
+ * main.ts — Electron main process entry point.
+ *
+ * Responsibilities (and nothing more):
+ *   1. Create the BrowserWindow.
+ *   2. Register all IPC handlers (delegated to ipc/ modules).
+ *   3. Handle app lifecycle events (ready, activate, window-all-closed).
+ *
+ * Business logic lives in services/ and repositories/.
+ * IPC wiring lives in ipc/.
+ * Path constants live in lib/paths.ts.
+ *
+ * Architecture overview:
+ *   main.ts
+ *     └─ ipc/*Handlers  ← thin IPC wrappers
+ *          ├─ services/  ← business logic (setup, sync)
+ *          └─ repositories/ ← data access (config, projects, git)
+ */
+
 import { app, BrowserWindow, ipcMain, globalShortcut } from "electron";
 
+// Disable Google's Autofill service to prevent unnecessary network calls.
 app.commandLine.appendSwitch("disable-features", "AutofillServerCommunication");
 
 import { join } from "path";
@@ -10,9 +30,11 @@ import { registerConfigHandlers }  from "./ipc/configHandlers";
 import { registerSetupHandlers }   from "./ipc/setupHandlers";
 import { registerSyncHandlers }    from "./ipc/syncHandlers";
 
-// ---- Window ----
+// Declared here so setupHandlers can access it via the getWin() callback.
+// BrowserWindow is created after IPC registration, hence the lazy getter.
 let win: BrowserWindow;
 
+/** Create and configure the main application window. */
 function createWindow(): void {
   win = new BrowserWindow({
     width:       1100,
@@ -24,8 +46,8 @@ function createWindow(): void {
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     webPreferences: {
       preload:          join(DIST_DIR, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration:  false,
+      contextIsolation: true,  // renderer cannot access Node APIs directly
+      nodeIntegration:  false, // use contextBridge in preload.ts instead
     },
   });
 
@@ -33,7 +55,9 @@ function createWindow(): void {
 }
 
 // ---- App lifecycle ----
+
 app.whenReady().then(() => {
+  // Startup diagnostic — visible in the Electron terminal / DevTools console.
   console.log("\n========== AI Configs Debug ==========");
   console.log("platform  :", process.platform);
   console.log("packaged  :", app.isPackaged);
@@ -49,21 +73,26 @@ app.whenReady().then(() => {
   console.log("conf ok   :", existsSync(join(DATA_ROOT, "projects.conf")));
   console.log("======================================\n");
 
-  // Register IPC handlers
+  // Register all IPC handlers before creating the window so handlers are
+  // ready before the renderer sends its first invoke.
   registerProjectHandlers(ipcMain, DATA_ROOT);
   registerConfigHandlers(ipcMain, ROOT, DATA_ROOT);
-  registerSetupHandlers(ipcMain, ROOT, DATA_ROOT, () => win);
+  registerSetupHandlers(ipcMain, ROOT, DATA_ROOT, () => win); // lazy win getter
   registerSyncHandlers(ipcMain, APP_DIR, ROOT, DATA_ROOT);
 
   createWindow();
 
+  // F12 toggles DevTools in both dev and production builds.
   globalShortcut.register("F12", () => win?.webContents.toggleDevTools());
 
+  // macOS: re-create window when the dock icon is clicked and no windows are open.
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
+// Quit the app when all windows are closed (Windows / Linux behaviour).
+// On macOS apps stay running until the user explicitly quits (Cmd+Q).
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
