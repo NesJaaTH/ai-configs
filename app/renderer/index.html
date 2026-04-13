@@ -1003,9 +1003,7 @@
       await appApi.saveProjects(projects.map((p) => ({ name: p.name, path: p.path })));
       cachedProjects = projects;
       renderProjList(projects);
-      // Keep projects page count in sync
-      const countEl = document.getElementById("project-count");
-      if (countEl) countEl.textContent = projects.length;
+      renderProjectRows(projects);
     } catch (e) {
       alert(`Failed to save projects: ${e}`);
     }
@@ -1112,27 +1110,29 @@
   // ============================================================
   // Projects
   // ============================================================
-  async function loadProjects() {
-    let projects;
-    try { projects = await appApi.getProjects(); }
-    catch (e) { termAppend(`❌ getProjects error: ${e}\n`, "error"); return; }
-
-    cachedProjects = projects;
+  function renderProjectRows(projects) {
     document.getElementById("project-count").textContent = projects.length;
-
     const groups = {};
     for (const p of projects) {
       const prefix = p.name.split("-")[0];
       if (!groups[prefix]) groups[prefix] = [];
       groups[prefix].push(p);
     }
-
     const list = document.getElementById("project-list");
     list.textContent = "";
     for (const [group, items] of Object.entries(groups)) {
       list.appendChild(el("div", "group-label", group));
       for (const p of items) list.appendChild(makeRow(p));
     }
+  }
+
+  async function loadProjects() {
+    let projects;
+    try { projects = await appApi.getProjects(); }
+    catch (e) { termAppend(`❌ getProjects error: ${e}\n`, "error"); return; }
+
+    cachedProjects = projects;
+    renderProjectRows(projects);
 
     const plat = navigator.userAgent.includes("Windows") ? "win"
                : navigator.userAgent.includes("Mac")     ? "mac" : "linux";
