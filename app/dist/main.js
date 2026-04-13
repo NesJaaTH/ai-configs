@@ -162,6 +162,15 @@ import_electron.ipcMain.handle("projects:list", () => {
   dbg("IPC", "projects:list called");
   return parseProjects();
 });
+import_electron.ipcMain.handle("projects:save", (_, entries) => {
+  const confPath = import_path.join(DATA_ROOT, "projects.conf");
+  const lines = entries.filter((e) => e.name.trim() && e.path.trim()).map((e) => `${e.name.trim()}:${e.path.trim()}`);
+  import_fs.writeFileSync(confPath, lines.join(`
+`) + `
+`, "utf-8");
+  dbg("IPC", "projects:save → wrote", lines.length, "entries");
+  return true;
+});
 import_electron.ipcMain.handle("git:log", () => {
   dbg("IPC", "git:log called");
   return getGitLog();

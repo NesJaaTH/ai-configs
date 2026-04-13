@@ -394,6 +394,40 @@
     .sr-remote-edit.open { display: flex; }
     .sr-edit-actions { display: flex; gap: var(--s2); }
 
+    /* Projects list in Config page */
+    .proj-list { display: flex; flex-direction: column; gap: 0; }
+    .proj-row {
+      display: grid; grid-template-columns: 120px 1fr auto;
+      align-items: center; gap: var(--s3);
+      padding: var(--s3) 0;
+      border-bottom: 1px solid var(--bd-subtle);
+    }
+    .proj-row:last-child { border-bottom: none; }
+    .proj-name-badge {
+      font-family: var(--f-mono); font-size: 11px; color: var(--amber);
+      background: oklch(75% 0.18 70 / 0.08); border: 1px solid oklch(75% 0.18 70 / 0.18);
+      border-radius: 4px; padding: 2px 7px; white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis; max-width: 120px;
+    }
+    .proj-path-text {
+      font-family: var(--f-mono); font-size: 11px; color: var(--t2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .proj-actions { display: flex; gap: 4px; }
+    .proj-edit-area {
+      display: none; flex-direction: column; gap: var(--s2);
+      grid-column: 1 / -1; padding-bottom: var(--s3);
+    }
+    .proj-edit-area.open { display: flex; }
+    .proj-edit-grid { display: grid; grid-template-columns: 120px 1fr; gap: var(--s2); }
+    .proj-edit-actions { display: flex; gap: var(--s2); align-items: center; }
+
+    .proj-add-row {
+      display: grid; grid-template-columns: 120px 1fr auto;
+      align-items: center; gap: var(--s2); margin-top: var(--s3);
+      padding-top: var(--s3); border-top: 1px solid var(--bd-subtle);
+    }
+
     /* ============================================================
        PAGE — SETUP
     ============================================================ */
@@ -659,14 +693,20 @@
     </div>
 
     <div class="settings-section">
+      <div class="settings-section-title">Projects</div>
+      <div class="proj-list" id="cfg-proj-list"></div>
+      <div class="proj-add-row">
+        <input class="sf-input" id="proj-add-name" type="text" placeholder="project-name" autocomplete="off" />
+        <input class="sf-input" id="proj-add-path" type="text" placeholder="/path/to/project" autocomplete="off" />
+        <button class="btn btn-sm btn-primary" id="btn-proj-add">Add</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
       <div class="settings-section-title">Environment</div>
       <div class="settings-row">
         <span class="settings-key">Platform</span>
         <span class="settings-val" id="cfg-platform">—</span>
-      </div>
-      <div class="settings-row">
-        <span class="settings-key">Projects</span>
-        <span class="settings-val" id="cfg-projects">—</span>
       </div>
     </div>
   </div>
@@ -806,12 +846,13 @@
     // Sync items chips
     renderSyncItemChips(cfg.syncItems || []);
 
+    // Projects list
+    renderProjList(cachedProjects);
+
     // Env
     const plat = navigator.userAgent.includes("Windows") ? "windows"
                : navigator.userAgent.includes("Mac")     ? "macOS" : "linux";
     document.getElementById("cfg-platform").textContent = plat;
-    const count = document.getElementById("project-count").textContent;
-    document.getElementById("cfg-projects").textContent = count || "—";
   }
 
   function renderSyncItemChips(items) {
@@ -858,6 +899,136 @@
     await saveSyncItems([...current, val]);
     input.value = "";
   }
+
+  // ---- Projects list in Config ----
+  function renderProjList(projects) {
+    const container = document.getElementById("cfg-proj-list");
+    container.textContent = "";
+    projects.forEach((p, idx) => {
+      const wrapper = document.createElement("div");
+
+      // Main visible row
+      const row = el("div", "proj-row");
+
+      const badge = el("span", "proj-name-badge");
+      badge.textContent = p.name;
+      badge.title = p.name;
+
+      const pathSpan = el("span", "proj-path-text");
+      pathSpan.textContent = p.path || "—";
+      pathSpan.title = p.path || "";
+
+      const actions = el("div", "proj-actions");
+
+      const editBtn = el("button", "sr-edit-icon");
+      editBtn.title = "Edit";
+      editBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M7.5 1.5l2 2L3 10H1V8L7.5 1.5Z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+      const delBtn = el("button", "sr-edit-icon");
+      delBtn.title = "Delete";
+      delBtn.style.color = "var(--t3)";
+      delBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 3h7M4.5 3V2h2v1M4.5 5v3M6.5 5v3M3 3l.5 6h4l.5-6" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+      row.appendChild(badge);
+      row.appendChild(pathSpan);
+      row.appendChild(actions);
+
+      // Inline edit area (hidden by default)
+      const editArea = el("div", "proj-edit-area");
+      const editGrid = el("div", "proj-edit-grid");
+
+      const nameInput = document.createElement("input");
+      nameInput.className = "sf-input";
+      nameInput.type = "text";
+      nameInput.placeholder = "project-name";
+      nameInput.value = p.name;
+      nameInput.autocomplete = "off";
+
+      const pathInput = document.createElement("input");
+      pathInput.className = "sf-input";
+      pathInput.type = "text";
+      pathInput.placeholder = "/path/to/project";
+      pathInput.value = p.path;
+      pathInput.autocomplete = "off";
+
+      editGrid.appendChild(nameInput);
+      editGrid.appendChild(pathInput);
+
+      const editActions = el("div", "proj-edit-actions");
+      const saveBtn = el("button", "btn btn-sm btn-primary", "Save");
+      const cancelBtn = el("button", "btn btn-sm", "Cancel");
+      editActions.appendChild(saveBtn);
+      editActions.appendChild(cancelBtn);
+
+      editArea.appendChild(editGrid);
+      editArea.appendChild(editActions);
+
+      wrapper.appendChild(row);
+      wrapper.appendChild(editArea);
+      container.appendChild(wrapper);
+
+      // Events
+      editBtn.addEventListener("click", () => {
+        editArea.classList.add("open");
+        nameInput.focus();
+      });
+
+      cancelBtn.addEventListener("click", () => {
+        nameInput.value = p.name;
+        pathInput.value = p.path;
+        editArea.classList.remove("open");
+      });
+
+      saveBtn.addEventListener("click", async () => {
+        const newName = nameInput.value.trim();
+        const newPath = pathInput.value.trim();
+        if (!newName || !newPath) return;
+        const updated = [...cachedProjects];
+        updated[idx] = { ...updated[idx], name: newName, path: newPath };
+        await saveProjects(updated);
+      });
+
+      delBtn.addEventListener("click", async () => {
+        if (!confirm(`Remove project "${p.name}"?`)) return;
+        const updated = cachedProjects.filter((_, i) => i !== idx);
+        await saveProjects(updated);
+      });
+    });
+  }
+
+  async function saveProjects(projects) {
+    try {
+      await appApi.saveProjects(projects.map((p) => ({ name: p.name, path: p.path })));
+      cachedProjects = projects;
+      renderProjList(projects);
+      // Keep projects page count in sync
+      const countEl = document.getElementById("project-count");
+      if (countEl) countEl.textContent = projects.length;
+    } catch (e) {
+      alert(`Failed to save projects: ${e}`);
+    }
+  }
+
+  document.getElementById("btn-proj-add").addEventListener("click", async () => {
+    const nameIn = document.getElementById("proj-add-name");
+    const pathIn = document.getElementById("proj-add-path");
+    const name   = nameIn.value.trim();
+    const path   = pathIn.value.trim();
+    if (!name || !path) return;
+    const updated = [...cachedProjects, { name, path, hasConfig: false, lastSync: null }];
+    await saveProjects(updated);
+    nameIn.value = "";
+    pathIn.value = "";
+  });
+
+  document.getElementById("proj-add-name").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("proj-add-path").focus();
+  });
+  document.getElementById("proj-add-path").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("btn-proj-add").click();
+  });
 
   // Remote inline edit
   document.getElementById("btn-edit-remote").addEventListener("click", () => {

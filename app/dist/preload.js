@@ -16,5 +16,6 @@ import_electron.contextBridge.exposeInMainWorld("api", {
   readSetup: () => import_electron.ipcRenderer.invoke("setup:read"),
   openDirDialog: () => import_electron.ipcRenderer.invoke("dialog:openDir"),
   previewSetup: (project) => import_electron.ipcRenderer.invoke("setup:preview", project),
-  runSetup: (opts) => import_electron.ipcRenderer.invoke("setup:run", opts)
+  runSetup: (opts) => import_electron.ipcRenderer.invoke("setup:run", opts),
+  saveProjects: (entries) => import_electron.ipcRenderer.invoke("projects:save", entries)
 });
