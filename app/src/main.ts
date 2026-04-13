@@ -190,6 +190,16 @@ ipcMain.handle("projects:list", () => {
   return parseProjects();
 });
 
+ipcMain.handle("projects:save", (_, entries: { name: string; path: string }[]) => {
+  const confPath = join(DATA_ROOT, "projects.conf");
+  const lines = entries
+    .filter((e) => e.name.trim() && e.path.trim())
+    .map((e) => `${e.name.trim()}:${e.path.trim()}`);
+  writeFileSync(confPath, lines.join("\n") + "\n", "utf-8");
+  dbg("IPC", "projects:save → wrote", lines.length, "entries");
+  return true;
+});
+
 ipcMain.handle("git:log", () => {
   dbg("IPC", "git:log called");
   return getGitLog();

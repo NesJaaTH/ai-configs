@@ -46,4 +46,7 @@ contextBridge.exposeInMainWorld("api", {
 
   runSetup: (opts: { project: string; targetPath: string }): Promise<{ ok: boolean; error?: string; results?: { name: string; status: string; note?: string }[] }> =>
     ipcRenderer.invoke("setup:run", opts),
+
+  saveProjects: (entries: { name: string; path: string }[]): Promise<boolean> =>
+    ipcRenderer.invoke("projects:save", entries),
 });
