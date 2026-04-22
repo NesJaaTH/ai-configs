@@ -29,6 +29,7 @@ import { registerProjectHandlers } from "./ipc/projectHandlers";
 import { registerConfigHandlers }  from "./ipc/configHandlers";
 import { registerSetupHandlers }   from "./ipc/setupHandlers";
 import { registerSyncHandlers }    from "./ipc/syncHandlers";
+import { registerGitHandlers }     from "./ipc/gitHandlers";
 
 // Declared here so setupHandlers can access it via the getWin() callback.
 // BrowserWindow is created after IPC registration, hence the lazy getter.
@@ -79,6 +80,7 @@ app.whenReady().then(() => {
   registerConfigHandlers(ipcMain, ROOT, DATA_ROOT);
   registerSetupHandlers(ipcMain, ROOT, DATA_ROOT, () => win); // lazy win getter
   registerSyncHandlers(ipcMain, APP_DIR, ROOT, DATA_ROOT);
+  registerGitHandlers(ipcMain, DATA_ROOT);
 
   createWindow();
 
