@@ -1,17 +1,32 @@
 #!/bin/bash
 # วิธีใช้: ./setup.sh [ชื่อโปรเจค] [path โปรเจค]
-# ตัวอย่าง: ./setup.sh miruway-api ~/code/miruway-api
+# ตัวอย่าง: ./setup.sh miruway-api D:/git/Miruway/miruway-api
+#
+# ⚠️  Windows path: ใช้ forward slash เสมอ (D:/git/... ไม่ใช่ D:\git\...)
+#     backslash จะถูก bash กินก่อน script ได้รับ argument
 
 PROJECT=$1
 AI_CONFIGS_DIR=$(dirname "$0")
 
 if [ -z "$PROJECT" ] || [ -z "$2" ]; then
   echo "Usage: ./setup.sh [project-name] [target-path]"
+  echo ""
+  echo "Example (Windows): ./setup.sh miruway-api D:/git/Miruway/miruway-api"
+  echo "Example (Unix):    ./setup.sh miruway-api ~/code/miruway-api"
   exit 1
 fi
 
-# Normalize path: convert Windows backslashes → forward slashes
+# Normalize: backslash → forward slash (ช่วยได้เมื่อ path ถูก quoted)
 TARGET=$(echo "$2" | tr '\\' '/')
+
+# Detect broken Windows path — backslash ถูก shell กินแล้ว เช่น D:gitMiruway
+if [[ "$TARGET" =~ ^[A-Za-z]:[^/] ]]; then
+  echo "❌ Path looks broken: $TARGET"
+  echo "   Backslashes were eaten by bash before the script received them."
+  echo "   Use forward slashes instead:"
+  echo "   ./setup.sh $PROJECT $(echo "$TARGET" | sed 's|^[A-Za-z]:|&/|')"
+  exit 1
+fi
 
 # Validate target directory exists
 if [ ! -d "$TARGET" ]; then
