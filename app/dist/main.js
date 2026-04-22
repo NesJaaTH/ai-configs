@@ -161,6 +161,19 @@ var import_path4 = require("path");
 
 // src/repositories/gitRepository.ts
 var import_child_process2 = require("child_process");
+function getGitLog(dataRoot) {
+  dbg("gitRepo", "cwd =", dataRoot);
+  const r = import_child_process2.spawnSync("git", ["-C", dataRoot, "log", "--oneline", "-8"], { encoding: "utf-8" });
+  if (r.error) {
+    dbg("gitRepo", "error →", r.error.message);
+    return "";
+  }
+  if (r.stderr)
+    dbg("gitRepo", "stderr →", r.stderr.trim());
+  dbg("gitRepo", "ok →", r.stdout?.split(`
+`).length, "lines");
+  return r.stdout?.trim() ?? "";
+}
 function getRemoteUrl(dataRoot) {
   const r = import_child_process2.spawnSync("git", ["-C", dataRoot, "remote", "get-url", "origin"], { encoding: "utf-8" });
   return r.stdout?.trim() ?? "";
@@ -340,6 +353,14 @@ function registerSyncHandlers(ipc, appDir, root, dataRoot) {
   });
 }
 
+// src/ipc/gitHandlers.ts
+function registerGitHandlers(ipc, dataRoot) {
+  ipc.handle("git:log", () => {
+    dbg("IPC", "git:log");
+    return getGitLog(dataRoot);
+  });
+}
+
 // src/main.ts
 import_electron3.app.commandLine.appendSwitch("disable-features", "AutofillServerCommunication");
 var win;
@@ -381,6 +402,7 @@ import_electron3.app.whenReady().then(() => {
   registerConfigHandlers(import_electron3.ipcMain, ROOT, DATA_ROOT);
   registerSetupHandlers(import_electron3.ipcMain, ROOT, DATA_ROOT, () => win);
   registerSyncHandlers(import_electron3.ipcMain, APP_DIR, ROOT, DATA_ROOT);
+  registerGitHandlers(import_electron3.ipcMain, DATA_ROOT);
   createWindow();
   import_electron3.globalShortcut.register("F12", () => win?.webContents.toggleDevTools());
   import_electron3.app.on("activate", () => {
